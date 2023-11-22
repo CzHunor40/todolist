@@ -83,31 +83,37 @@ class Todo:
         select_button = tk.Button(user_selection_window, text="Kiválaszt", width=15, command=lambda: self.on_user_selected(user_listbox.get(tk.ACTIVE), user_selection_window))
         select_button.pack()
 
-        add_user_button = tk.Button(user_selection_window, text="Felhasználó hozzáadása", width=20, command=self.add_user)
+        add_user_button = tk.Button(user_selection_window, text="Felhasználó hozzáadása", width=20, command=lambda: self.add_user(user_selection_window))
         add_user_button.pack(side=tk.LEFT, padx=5)
 
-        remove_user_button = tk.Button(user_selection_window, text="Felhasználó törlése", width=20, command=self.remove_user)
+        remove_user_button = tk.Button(user_selection_window, text="Felhasználó törlése", width=20, command=lambda: self.remove_user(user_listbox.get(tk.ACTIVE), user_selection_window))
         remove_user_button.pack(side=tk.LEFT, padx=5)
 
-    def add_user(self):
+    def add_user(self,user_selection_window):
         new_username = simpledialog.askstring("Hozzáadás", "Adj meg egy felhasználónevet:")
         if new_username:
             try:
                 self.db_manager.execute_sqlcommand("INSERT INTO users (username) VALUES (%s)", (new_username,))
                 messagebox.showinfo("Felhasználó hozzáadva", f"{new_username} felhasználó hozzáadva.")
                 self.select_user()
+                user_selection_window.destroy()
+
             except Exception as err:
                 messagebox.showerror("Error", f"{err} felhasználó létrehozása sikertelen.")
 
-    def remove_user(self):
-        selected_user = simpledialog.askstring("Felhasználó törlése", "Add meg a törölni kívánt felhasználó nevét:")
-        if selected_user:
-            try:
-                self.db_manager.execute_sqlcommand("DELETE FROM users WHERE username=%s", (selected_user,))
-                messagebox.showinfo("Felhasználó törölve", f"{selected_user} felhasználó törölve.")
-                self.select_user()
-            except Exception as err:
-                messagebox.showerror("Error", f"{err} felhasználó törlése sikertelen.")
+    def remove_user(self,selected_user,user_selection_window):
+        confirm = messagebox.askyesno("Törlés", f"Biztos, hogy törölni szeretnéd {selected_user} felhasználót?")
+        if confirm:
+            if selected_user:
+                self.db_manager.execute_sqlcommand(
+                    "DELETE FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s)", (selected_user,))
+                try:
+                    self.db_manager.execute_sqlcommand("DELETE FROM users WHERE username=%s", (selected_user,))
+                    messagebox.showinfo("Felhasználó törölve", f"{selected_user} felhasználó törölve.")
+                    self.select_user()
+                    user_selection_window.destroy()
+                except Exception as err:
+                    messagebox.showerror("Error", f"{err} felhasználó törlése sikertelen.")
 
     def on_user_selected(self, selected_user, user_selection_window):
         if selected_user:
@@ -127,8 +133,7 @@ class Todo:
             self.total_points = 0
             self.max_possible_points = 0
 
-            self.db_manager.execute_sqlcommand("SELECT * FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s)",
-                                (self.username,))
+            self.db_manager.cursor.execute("SELECT * FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s)", (self.username,))
             rows = self.db_manager.cursor.fetchall()
 
             for i, row in enumerate(rows):
@@ -166,6 +171,7 @@ class Todo:
             self.points_entry.delete(0, tk.END)
             self.update_points_label()
 
+
             self.db_manager.execute_sqlcommand(
                 "INSERT INTO tasks (user_id, task, points, completed) VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s)",
                 (self.username, task, points, 0))
@@ -186,8 +192,8 @@ class Todo:
                 self.update_points_label()
 
                 self.db_manager.execute_sqlcommand(
-                    "DELETE FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
-                    (self.username, task_data["task"], task_data["points"]))
+                    "DELETE FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s AND id=%s",
+                    (self.username, task_data["task"], task_data["points"], task_data["id"]))
                 self.load_user_data()
 
     def complete_task(self):
@@ -207,6 +213,7 @@ class Todo:
                 messagebox.showinfo("Feladat teljesítve",
                                     f"{task_data['task']} ({task_data['points']} pont) feladat teljesítve.")
 
+
                 self.db_manager.execute_sqlcommand("UPDATE tasks SET completed=1 WHERE id=%s", (task_id,))
                 self.load_user_data()
 
@@ -223,14 +230,18 @@ class Todo:
                 self.task_listbox.itemconfig(selected_index, {'fg': 'black'})
                 self.update_points_label()
 
+                self.db_manager.cursor.execute(
+                    "UPDATE tasks SET completed=0 WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s AND id=%s",
+                    (self.username, task_data["task"], task_data["points"], task_data["id"]))
                 self.db_manager.execute_sqlcommand(
-                    "UPDATE tasks SET completed=0 WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
-                    (self.username, task_data["task"], task_data["points"]))
+                    "UPDATE tasks SET completed=0 WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s AND id=%s",
+                    (self.username, task_data["task"], task_data["points"], task_data["id"]))
                 messagebox.showinfo("Task Reset",
                                     f"Task '{task_data['task']}' ({task_data['points']} points) has been reset.")
 
     def update_points_label(self):
         if hasattr(self, 'halfway_notification_sent'):
+            halfway_point = self.max_possible_points / 2
 
             self.totalpoints_label.config(text=f"Teljesített pontok: {self.total_points} / {self.max_possible_points}")
             if self.total_points > self.max_possible_points / 2 and not self.halfway_notification_sent:
