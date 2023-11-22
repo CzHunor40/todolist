@@ -93,7 +93,7 @@ class Todo:
         new_username = simpledialog.askstring("Hozzáadás", "Adj meg egy felhasználónevet:")
         if new_username:
             try:
-                self.db_manager.execute_query("INSERT INTO users (username) VALUES (%s)", (new_username,))
+                self.db_manager.execute_sqlcommand("INSERT INTO users (username) VALUES (%s)", (new_username,))
                 messagebox.showinfo("Felhasználó hozzáadva", f"{new_username} felhasználó hozzáadva.")
                 self.select_user()
             except Exception as err:
@@ -103,7 +103,7 @@ class Todo:
         selected_user = simpledialog.askstring("Felhasználó törlése", "Add meg a törölni kívánt felhasználó nevét:")
         if selected_user:
             try:
-                self.db_manager.execute_query("DELETE FROM users WHERE username=%s", (selected_user,))
+                self.db_manager.execute_sqlcommand("DELETE FROM users WHERE username=%s", (selected_user,))
                 messagebox.showinfo("Felhasználó törölve", f"{selected_user} felhasználó törölve.")
                 self.select_user()
             except Exception as err:
@@ -127,7 +127,7 @@ class Todo:
             self.total_points = 0
             self.max_possible_points = 0
 
-            self.db_manager.cursor.execute("SELECT * FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s)",
+            self.db_manager.execute_sqlcommand("SELECT * FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s)",
                                 (self.username,))
             rows = self.db_manager.cursor.fetchall()
 
@@ -166,9 +166,6 @@ class Todo:
             self.points_entry.delete(0, tk.END)
             self.update_points_label()
 
-            self.db_manager.cursor.execute(
-                "INSERT INTO tasks (user_id, task, points, completed) VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s)",
-                (self.username, task, points, 0))
             self.db_manager.execute_sqlcommand(
                 "INSERT INTO tasks (user_id, task, points, completed) VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s)",
                 (self.username, task, points, 0))
@@ -188,9 +185,6 @@ class Todo:
                 self.tasks.pop(selected_index[0])
                 self.update_points_label()
 
-                self.db_manager.cursor.execute(
-                    "DELETE FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
-                    (self.username, task_data["task"], task_data["points"]))
                 self.db_manager.execute_sqlcommand(
                     "DELETE FROM tasks WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
                     (self.username, task_data["task"], task_data["points"]))
@@ -213,7 +207,6 @@ class Todo:
                 messagebox.showinfo("Feladat teljesítve",
                                     f"{task_data['task']} ({task_data['points']} pont) feladat teljesítve.")
 
-                self.db_manager.cursor.execute("UPDATE tasks SET completed=1 WHERE id=%s", (task_id,))
                 self.db_manager.execute_sqlcommand("UPDATE tasks SET completed=1 WHERE id=%s", (task_id,))
                 self.load_user_data()
 
@@ -230,9 +223,6 @@ class Todo:
                 self.task_listbox.itemconfig(selected_index, {'fg': 'black'})
                 self.update_points_label()
 
-                self.db_manager.cursor.execute(
-                    "UPDATE tasks SET completed=0 WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
-                    (self.username, task_data["task"], task_data["points"]))
                 self.db_manager.execute_sqlcommand(
                     "UPDATE tasks SET completed=0 WHERE user_id=(SELECT id FROM users WHERE username=%s) AND task=%s AND points=%s",
                     (self.username, task_data["task"], task_data["points"]))
@@ -241,7 +231,6 @@ class Todo:
 
     def update_points_label(self):
         if hasattr(self, 'halfway_notification_sent'):
-            halfway_point = self.max_possible_points / 2
 
             self.totalpoints_label.config(text=f"Teljesített pontok: {self.total_points} / {self.max_possible_points}")
             if self.total_points > self.max_possible_points / 2 and not self.halfway_notification_sent:
